@@ -11,3 +11,6 @@ dependencies = [
 
 [tool.uv]
 constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
+
+[project.scripts]
+dynamics-api-app = "src.main:main"

@@ -1,36 +1,14 @@
 import sys
 import json
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit,
-    QPushButton, QListWidget, QListWidgetItem, QMessageBox, QComboBox, QInputDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit,
+    QPushButton, QListWidget, QListWidgetItem, QMessageBox, QComboBox
 )
 from PyQt5.QtCore import Qt
 
-from auth import Auth
-from api import APIClient
-
-class ApiRequest:
-    def __init__(self, name, method, url, headers, payload):
-        self.name = name
-        self.method = method
-        self.url = url
-        self.headers = headers
-        self.payload = payload
-
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "method": self.method,
-            "url": self.url,
-            "headers": self.headers,
-            "payload": self.payload
-        }
-
-    @staticmethod
-    def from_dict(d):
-        return ApiRequest(
-            d["name"], d["method"], d["url"], d["headers"], d["payload"]
-        )
+from src.auth_client import Auth
+from src.api_client import APIClient
+from src.models import ApiRequest
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -63,12 +41,15 @@ class MainWindow(QWidget):
 
         # Auth section
         auth_layout = QHBoxLayout()
-        self.scope_edit = QLineEdit("user.read")
+        self.scope_edit = QLineEdit("https://api.bap.microsoft.com/.default")
         auth_layout.addWidget(QLabel("Scopes:"))
         auth_layout.addWidget(self.scope_edit)
-        self.auth_btn = QPushButton("認証（MSALでアクセストークン取得）")
-        self.auth_btn.clicked.connect(self.authenticate)
-        auth_layout.addWidget(self.auth_btn)
+        self.login_btn = QPushButton("ログイン")
+        self.login_btn.clicked.connect(self.authenticate)
+        auth_layout.addWidget(self.login_btn)
+        self.logout_btn = QPushButton("ログアウト")
+        self.logout_btn.clicked.connect(self.logout)
+        auth_layout.addWidget(self.logout_btn)
         self.token_label = QLabel("未認証")
         self.token_label.setWordWrap(True)
         auth_layout.addWidget(self.token_label)
@@ -89,7 +70,13 @@ class MainWindow(QWidget):
         method_url_layout.addWidget(self.url_edit)
         form_layout.addLayout(method_url_layout)
 
-        self.headers_edit = QTextEdit('{\n  "Content-Type": "application/json",\n  "OData-MaxVersion": "4.0",\n  "OData-Version": "4.0",\n  "Accept": "application/json"\n}')
+        default_headers = {
+            "Content-Type": "application/json",
+            "OData-MaxVersion": "4.0",
+            "OData-Version": "4.0",
+            "Accept": "application/json"
+        }
+        self.headers_edit = QTextEdit(json.dumps(default_headers, indent=2, ensure_ascii=False))
         self.headers_edit.setPlaceholderText("ヘッダー (JSON形式)")
         form_layout.addWidget(QLabel("ヘッダー"))
         form_layout.addWidget(self.headers_edit)
@@ -136,6 +123,11 @@ class MainWindow(QWidget):
             self.token_label.setText("未認証")
             QMessageBox.warning(self, "認証", "アクセストークン取得失敗")
 
+    def logout(self):
+        self.token = None
+        self.token_label.setText("未認証")
+        QMessageBox.information(self, "ログアウト", "ログアウトしました")
+
     def add_or_update_request(self):
         try:
             headers = json.loads(self.headers_edit.toPlainText())
@@ -167,7 +159,13 @@ class MainWindow(QWidget):
         self.name_edit.clear()
         self.method_combo.setCurrentIndex(0)
         self.url_edit.clear()
-        self.headers_edit.setText('{\n  "Content-Type": "application/json",\n  "OData-MaxVersion": "4.0",\n  "OData-Version": "4.0",\n  "Accept": "application/json"\n}')
+        default_headers = {
+            "Content-Type": "application/json",
+            "OData-MaxVersion": "4.0",
+            "OData-Version": "4.0",
+            "Accept": "application/json"
+        }
+        self.headers_edit.setText(json.dumps(default_headers, indent=2, ensure_ascii=False))
         self.payload_edit.setText("{}")
         self.selected_idx = None
 
@@ -226,9 +224,3 @@ class MainWindow(QWidget):
             self.result_edit.setPlainText(json.dumps(response, indent=2, ensure_ascii=False))
         except Exception as e:
             self.result_edit.setPlainText(f"リクエスト送信失敗: {e}")
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec_())
