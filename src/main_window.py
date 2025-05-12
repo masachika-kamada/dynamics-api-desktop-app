@@ -1,149 +1,157 @@
-import sys
 import json
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit,
-    QPushButton, QListWidget, QListWidgetItem, QMessageBox, QComboBox
-)
-from PyQt5.QtCore import Qt
+import tkinter as tk
+from tkinter import messagebox
+from ttkbootstrap import Style
+from ttkbootstrap.constants import *
+from ttkbootstrap import ttk
 
 from src.auth_client import Auth
 from src.api_client import APIClient
 from src.models import ApiRequest
 
-class MainWindow(QWidget):
+class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Custom Postman-like API Client")
-        self.resize(900, 600)
+        self.title("Custom Postman-like API Client (tkinter + ttkbootstrap)")
+        self.geometry("1100x700")
+        self.style = Style("superhero")  # ttkbootstrapのテーマを指定
+        self.style.configure(".", font=("TkDefaultFont", 11))
+        self.style.configure("TButton", font=("TkDefaultFont", 11))
+
+        # 標準タイトルバー（カスタムタイトルバーは使わない）
+
         self.auth = Auth()
         self.token = None
         self.requests = []
         self.selected_idx = None
 
-        self.init_ui()
+        self.create_widgets()
 
-    def init_ui(self):
-        main_layout = QHBoxLayout(self)
+
+    def create_widgets(self):
+        # Main layout
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
+
+        left_frame = ttk.Frame(main_frame)
+        left_frame.pack(side=LEFT, fill=Y, padx=(0, 10), expand=False)
+
+        right_frame = ttk.Frame(main_frame)
+        right_frame.pack(side=LEFT, fill=BOTH, expand=True)
 
         # Left: Request List
-        left_layout = QVBoxLayout()
-        self.req_list = QListWidget()
-        self.req_list.itemClicked.connect(self.on_req_selected)
-        left_layout.addWidget(QLabel("リクエスト一覧"))
-        left_layout.addWidget(self.req_list)
-        btn_del = QPushButton("選択リクエスト削除")
-        btn_del.clicked.connect(self.delete_request)
-        left_layout.addWidget(btn_del)
-        main_layout.addLayout(left_layout, 2)
+        ttk.Label(left_frame, text="Requests").pack(anchor=NW)
+        self.req_listbox = tk.Listbox(left_frame, width=30, height=25, font=("TkDefaultFont", 11))
+        self.req_listbox.pack(fill=Y, expand=True)
+        self.req_listbox.bind("<<ListboxSelect>>", self.on_req_selected)
+        ttk.Button(left_frame, text="Delete", command=self.delete_request, bootstyle=DANGER).pack(fill=X, pady=5)
 
-        # Right: Request Editor & Result
-        right_layout = QVBoxLayout()
+        # Right: Auth section
+        auth_frame = ttk.Frame(right_frame)
+        auth_frame.pack(fill=X, pady=(0, 10))
+        ttk.Label(auth_frame, text="Scopes:").pack(side=LEFT)
+        self.scope_var = tk.StringVar(value="https://api.bap.microsoft.com/.default")
+        ttk.Entry(auth_frame, textvariable=self.scope_var, width=40, font=("TkDefaultFont", 11)).pack(side=LEFT, padx=5)
+        ttk.Button(auth_frame, text="Login", command=self.authenticate, bootstyle=SUCCESS).pack(side=LEFT, padx=2)
+        ttk.Button(auth_frame, text="Logout", command=self.logout, bootstyle=SECONDARY).pack(side=LEFT, padx=2)
+        self.token_label = ttk.Label(auth_frame, text="Not Authenticated", bootstyle=WARNING)
+        self.token_label.pack(side=LEFT, padx=10)
 
-        # Auth section
-        auth_layout = QHBoxLayout()
-        self.scope_edit = QLineEdit("https://api.bap.microsoft.com/.default")
-        auth_layout.addWidget(QLabel("Scopes:"))
-        auth_layout.addWidget(self.scope_edit)
-        self.login_btn = QPushButton("ログイン")
-        self.login_btn.clicked.connect(self.authenticate)
-        auth_layout.addWidget(self.login_btn)
-        self.logout_btn = QPushButton("ログアウト")
-        self.logout_btn.clicked.connect(self.logout)
-        auth_layout.addWidget(self.logout_btn)
-        self.token_label = QLabel("未認証")
-        self.token_label.setWordWrap(True)
-        auth_layout.addWidget(self.token_label)
-        right_layout.addLayout(auth_layout)
+        # Right: Request editor
+        editor_frame = ttk.Frame(right_frame)
+        editor_frame.pack(fill=X, pady=(0, 10))
 
-        # Request editor
-        form_layout = QVBoxLayout()
-        self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("リクエスト名")
-        form_layout.addWidget(self.name_edit)
+        ttk.Label(editor_frame, text="Name").grid(row=0, column=0, sticky=W, pady=4)
+        self.name_var = tk.StringVar()
+        ttk.Entry(editor_frame, textvariable=self.name_var, width=30, font=("TkDefaultFont", 11)).grid(row=0, column=1, sticky=W, padx=5, pady=4)
 
-        method_url_layout = QHBoxLayout()
-        self.method_combo = QComboBox()
-        self.method_combo.addItems(["GET", "POST", "PUT", "DELETE", "PATCH"])
-        method_url_layout.addWidget(self.method_combo)
-        self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText("エンドポイントURL")
-        method_url_layout.addWidget(self.url_edit)
-        form_layout.addLayout(method_url_layout)
+        ttk.Label(editor_frame, text="Method").grid(row=1, column=0, sticky=W, pady=4)
+        self.method_var = tk.StringVar(value="GET")
+        method_frame = ttk.Frame(editor_frame)
+        method_frame.grid(row=1, column=1, sticky=W, padx=5, pady=4)
+        self.method_buttons = {}
+        for m in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
+            btn = ttk.Button(method_frame, text=m, width=6, bootstyle=PRIMARY if m == "GET" else SECONDARY, command=lambda m=m: self.select_method(m))
+            btn.pack(side=LEFT, padx=2)
+            self.method_buttons[m] = btn
 
+        # --- 以下をcreate_widgets内に戻す ---
+        ttk.Label(editor_frame, text="URL").grid(row=2, column=0, sticky=W, pady=4)
+        self.url_var = tk.StringVar()
+        ttk.Entry(editor_frame, textvariable=self.url_var, width=50, font=("TkDefaultFont", 11)).grid(row=2, column=1, sticky=W, padx=5, pady=4)
+
+        ttk.Label(editor_frame, text="Headers (JSON)").grid(row=3, column=0, sticky=NW, pady=4)
+        self.headers_text = tk.Text(editor_frame, width=50, height=6, font=("TkDefaultFont", 11))
+        self.headers_text.grid(row=3, column=1, sticky=W, padx=5, pady=4)
+        self.set_default_headers()
+
+        ttk.Label(editor_frame, text="Payload (JSON)").grid(row=4, column=0, sticky=NW, pady=4)
+        self.payload_text = tk.Text(editor_frame, width=50, height=6, font=("TkDefaultFont", 11))
+        self.payload_text.grid(row=4, column=1, sticky=W, padx=5, pady=4)
+        self.payload_text.insert("1.0", "{}")
+
+        btn_frame = ttk.Frame(editor_frame)
+        btn_frame.grid(row=5, column=1, sticky=E, pady=5)
+        ttk.Button(btn_frame, text="Save", command=self.add_or_update_request, bootstyle=PRIMARY).pack(side=LEFT, padx=2)
+        ttk.Button(btn_frame, text="Clear", command=self.clear_inputs, bootstyle=SECONDARY).pack(side=LEFT, padx=2)
+
+        # Right: Execute & Result
+        exec_frame = ttk.Frame(right_frame)
+        exec_frame.pack(fill=X, pady=(0, 10))
+        ttk.Button(exec_frame, text="Send", command=self.execute_request, bootstyle=SUCCESS).pack(side=LEFT, padx=2)
+
+        ttk.Label(right_frame, text="Result").pack(anchor=NW)
+        self.result_text = tk.Text(right_frame, width=80, height=10, state="normal", font=("TkDefaultFont", 11))
+        self.result_text.pack(fill=BOTH, expand=True)
+
+    def select_method(self, method):
+        self.method_var.set(method)
+        for m, btn in self.method_buttons.items():
+            btn.config(bootstyle=PRIMARY if m == method else SECONDARY)
+
+    def set_default_headers(self):
         default_headers = {
             "Content-Type": "application/json",
             "OData-MaxVersion": "4.0",
             "OData-Version": "4.0",
             "Accept": "application/json"
         }
-        self.headers_edit = QTextEdit(json.dumps(default_headers, indent=2, ensure_ascii=False))
-        self.headers_edit.setPlaceholderText("ヘッダー (JSON形式)")
-        form_layout.addWidget(QLabel("ヘッダー"))
-        form_layout.addWidget(self.headers_edit)
-
-        self.payload_edit = QTextEdit("{}")
-        self.payload_edit.setPlaceholderText("ペイロード (JSON形式)")
-        form_layout.addWidget(QLabel("ペイロード"))
-        form_layout.addWidget(self.payload_edit)
-
-        btn_layout = QHBoxLayout()
-        self.add_btn = QPushButton("リクエスト追加/更新")
-        self.add_btn.clicked.connect(self.add_or_update_request)
-        btn_layout.addWidget(self.add_btn)
-        self.clear_btn = QPushButton("入力クリア")
-        self.clear_btn.clicked.connect(self.clear_inputs)
-        btn_layout.addWidget(self.clear_btn)
-        form_layout.addLayout(btn_layout)
-
-        right_layout.addLayout(form_layout)
-
-        # Execute & Result
-        exec_layout = QHBoxLayout()
-        self.exec_btn = QPushButton("実行")
-        self.exec_btn.clicked.connect(self.execute_request)
-        exec_layout.addWidget(self.exec_btn)
-        right_layout.addLayout(exec_layout)
-
-        self.result_edit = QTextEdit()
-        self.result_edit.setReadOnly(True)
-        right_layout.addWidget(QLabel("結果"))
-        right_layout.addWidget(self.result_edit)
-
-        main_layout.addLayout(right_layout, 5)
+        self.headers_text.delete("1.0", tk.END)
+        self.headers_text.insert("1.0", json.dumps(default_headers, indent=2, ensure_ascii=False))
 
     def authenticate(self):
-        scopes = [s.strip() for s in self.scope_edit.text().split(",")]
+        scopes = [s.strip() for s in self.scope_var.get().split(",")]
         token = self.auth.acquire_token(scopes)
         if token:
             self.token = token
-            self.token_label.setText("認証済み")
-            QMessageBox.information(self, "認証", "アクセストークン取得成功")
+            self.token_label.config(text="Authenticated", bootstyle=SUCCESS)
+            messagebox.showinfo("Auth", "Access token acquired successfully")
         else:
             self.token = None
-            self.token_label.setText("未認証")
-            QMessageBox.warning(self, "認証", "アクセストークン取得失敗")
+            self.token_label.config(text="Not Authenticated", bootstyle=WARNING)
+            messagebox.showwarning("Auth", "Failed to acquire access token")
 
     def logout(self):
         self.token = None
-        self.token_label.setText("未認証")
-        QMessageBox.information(self, "ログアウト", "ログアウトしました")
+        self.token_label.config(text="Not Authenticated", bootstyle=WARNING)
+        messagebox.showinfo("Logout", "Logged out")
 
     def add_or_update_request(self):
         try:
-            headers = json.loads(self.headers_edit.toPlainText())
+            headers = json.loads(self.headers_text.get("1.0", tk.END))
         except Exception as e:
-            QMessageBox.warning(self, "エラー", f"ヘッダーのJSONが不正です: {e}")
+            messagebox.showwarning("Error", f"Invalid header JSON: {e}")
             return
         try:
-            payload = json.loads(self.payload_edit.toPlainText())
+            payload = json.loads(self.payload_text.get("1.0", tk.END))
         except Exception as e:
             payload = None  # GET等では空でもOK
 
-        name = self.name_edit.text().strip() or f"Request {len(self.requests)+1}"
-        method = self.method_combo.currentText()
-        url = self.url_edit.text().strip()
+        name = self.name_var.get().strip() or f"Request {len(self.requests)+1}"
+        method = self.method_var.get()
+        url = self.url_var.get().strip()
         if not url:
-            QMessageBox.warning(self, "エラー", "エンドポイントURLを入力してください")
+            messagebox.showwarning("Error", "Please enter endpoint URL")
             return
 
         req = ApiRequest(name, method, url, headers, payload)
@@ -156,51 +164,52 @@ class MainWindow(QWidget):
         self.clear_inputs()
 
     def clear_inputs(self):
-        self.name_edit.clear()
-        self.method_combo.setCurrentIndex(0)
-        self.url_edit.clear()
-        default_headers = {
-            "Content-Type": "application/json",
-            "OData-MaxVersion": "4.0",
-            "OData-Version": "4.0",
-            "Accept": "application/json"
-        }
-        self.headers_edit.setText(json.dumps(default_headers, indent=2, ensure_ascii=False))
-        self.payload_edit.setText("{}")
+        self.name_var.set("")
+        self.method_var.set("GET")
+        self.url_var.set("")
+        self.set_default_headers()
+        self.payload_text.delete("1.0", tk.END)
+        self.payload_text.insert("1.0", "{}")
         self.selected_idx = None
 
     def refresh_req_list(self):
-        self.req_list.clear()
+        self.req_listbox.delete(0, tk.END)
         for req in self.requests:
-            item = QListWidgetItem(f"{req.name} ({req.method} {req.url})")
-            self.req_list.addItem(item)
+            self.req_listbox.insert(tk.END, f"{req.name} ({req.method} {req.url})")
 
-    def on_req_selected(self, item):
-        idx = self.req_list.currentRow()
+    def on_req_selected(self, event):
+        idxs = self.req_listbox.curselection()
+        if not idxs:
+            return
+        idx = idxs[0]
         req = self.requests[idx]
         self.selected_idx = idx
-        self.name_edit.setText(req.name)
-        self.method_combo.setCurrentText(req.method)
-        self.url_edit.setText(req.url)
-        self.headers_edit.setText(json.dumps(req.headers, indent=2, ensure_ascii=False))
-        self.payload_edit.setText(json.dumps(req.payload, indent=2, ensure_ascii=False) if req.payload else "")
+        self.name_var.set(req.name)
+        self.method_var.set(req.method)
+        self.url_var.set(req.url)
+        self.headers_text.delete("1.0", tk.END)
+        self.headers_text.insert("1.0", json.dumps(req.headers, indent=2, ensure_ascii=False))
+        self.payload_text.delete("1.0", tk.END)
+        self.payload_text.insert("1.0", json.dumps(req.payload, indent=2, ensure_ascii=False) if req.payload else "")
 
     def delete_request(self):
-        idx = self.req_list.currentRow()
-        if idx >= 0:
-            del self.requests[idx]
-            self.refresh_req_list()
-            self.clear_inputs()
+        idxs = self.req_listbox.curselection()
+        if not idxs:
+            return
+        idx = idxs[0]
+        del self.requests[idx]
+        self.refresh_req_list()
+        self.clear_inputs()
 
     def execute_request(self):
-        idx = self.req_list.currentRow()
-        if idx < 0:
-            QMessageBox.warning(self, "エラー", "リクエストを選択してください")
+        idxs = self.req_listbox.curselection()
+        if not idxs:
+            messagebox.showwarning("Error", "Please select a request")
             return
         if not self.token:
-            QMessageBox.warning(self, "エラー", "先に認証してください")
+            messagebox.showwarning("Error", "Please authenticate first")
             return
-        req = self.requests[idx]
+        req = self.requests[idxs[0]]
         client = APIClient()
         headers = req.headers.copy()
         headers["Authorization"] = f"Bearer {self.token}"
@@ -221,6 +230,10 @@ class MainWindow(QWidget):
                     response = resp.json()
                 except Exception:
                     response = resp.text
-            self.result_edit.setPlainText(json.dumps(response, indent=2, ensure_ascii=False))
+            self.result_text.config(state="normal")
+            self.result_text.delete("1.0", tk.END)
+            self.result_text.insert("1.0", json.dumps(response, indent=2, ensure_ascii=False))
         except Exception as e:
-            self.result_edit.setPlainText(f"リクエスト送信失敗: {e}")
+            self.result_text.config(state="normal")
+            self.result_text.delete("1.0", tk.END)
+            self.result_text.insert("1.0", f"Request failed: {e}")
