@@ -1,7 +1,7 @@
 [project]
 name = "dynamics-api-desktop-app"
 version = "0.1.0"
-description = "Add your description here"
+description = "Microsoft Dynamics APIと連携するPython製デスクトップアプリケーション"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
