@@ -10,6 +10,7 @@ class TabManager:
         self.on_close_tab = on_close_tab
         self.on_send = on_send
         self.tab_fields = {}  # {idx: {"method_dd":..., "url_field":...}}
+        self.tab_state = {}   # {idx: {"method":..., "url":..., ...}}
 
     def build_tabs(self):
         tab_controls = []
@@ -25,49 +26,92 @@ class TabManager:
         return tab_controls
 
     def _make_tab(self, idx):
+        # 状態取得 or デフォルト
+        state = self.tab_state.get(idx, {})
+        method_val = state.get("method", "GET")
+        url_val = state.get("url", "https://*.crm7.dynamics.com/api/data/v9.2/WhoAmI")
+        query_val = state.get("query", "")
+        headers_val = state.get("headers", "Accept: application/json\nContent-Type: application/json\nOData-MaxVersion: 4.0\nOData-Version: 4.0")
+        payload_val = state.get("payload", "")
+        result_val = state.get("result", "")
+
         method_dd = ft.Dropdown(
             label="Method",
-            value="GET",
+            value=method_val,
             options=[ft.dropdown.Option(m) for m in METHODS],
-            width=100,
+            width=110,
             border_color=ft.Colors.GREY_300,
+            on_change=lambda e: self._update_state(idx, "method", e.control.value)
         )
         url_field = ft.TextField(
             label="URL",
-            value="https://*.crm7.dynamics.com/api/data/v9.2/WhoAmI",
+            value=url_val,
             width=600,
             border_color=ft.Colors.GREY_300,
+            on_change=lambda e: self._update_state(idx, "url", e.control.value)
         )
         query_field = ft.TextField(
-            label="Query Parameters",
-            value="",
+            label="Query Parameters (after '?')",
+            value=query_val,
             multiline=True,
             min_lines=1,
             max_lines=4,
             border_color=ft.Colors.GREY_300,
+            on_change=lambda e: self._update_state(idx, "query", e.control.value)
+        )
+
+        def handle_extract_query(e):
+            url_val = url_field.value
+            if "?" in url_val:
+                base, query = url_val.split("?", 1)
+                url_field.value = base
+                query_field.value = query
+                self._update_state(idx, "url", base)
+                self._update_state(idx, "query", query)
+                # 強制UI更新
+                if hasattr(url_field, "update"):
+                    url_field.update()
+                if hasattr(query_field, "update"):
+                    query_field.update()
+
+        extract_btn = ft.TextButton(
+            text="Extract Query",
+            on_click=handle_extract_query,
+            style=ft.ButtonStyle(
+                padding=ft.padding.symmetric(horizontal=8, vertical=0),
+                shape=ft.RoundedRectangleBorder(radius=6),
+                bgcolor=ft.Colors.GREY_200,
+            ),
+            width=110,
+            tooltip="Move query string from URL to Query Parameters"
         )
         headers_field = ft.TextField(
             label="Headers (key: value)",
-            value='Content-Type: application/json\nAuthorization: Bearer xxxxx',
+            value=headers_val,
             multiline=True,
             min_lines=4,
             max_lines=8,
             border_color=ft.Colors.GREY_300,
+            on_change=lambda e: self._update_state(idx, "headers", e.control.value)
         )
         payload_field = ft.TextField(
             label="Payload (JSON)",
+            value=payload_val,
             multiline=True,
             min_lines=4,
             max_lines=8,
             border_color=ft.Colors.GREY_300,
+            on_change=lambda e: self._update_state(idx, "payload", e.control.value)
         )
         send_btn = ft.FilledButton("Send", icon=ft.Icons.SEND)
         result_field = ft.TextField(
+            value=result_val,
             multiline=True,
             min_lines=100,
             expand=True,
             border_color=ft.Colors.GREY_300,
             read_only=True,
+            on_change=lambda e: self._update_state(idx, "result", e.control.value)
         )
         close_btn = ft.IconButton(
             icon=ft.Icons.CLOSE,
@@ -99,8 +143,12 @@ class TabManager:
                     margin=ft.margin.only(top=20, bottom=10),
                 ),
                 ft.Container(
-                    ft.Row([ft.Container(query_field, expand=True)]),
-                    margin=ft.margin.only(left=110, bottom=20),
+                    ft.Row([
+                        # ft.Column([extract_btn, decode_btn]),  # TODO: implement decode query button
+                        extract_btn,
+                        ft.Container(query_field, expand=True)
+                    ], spacing=10),
+                    margin=ft.margin.only(bottom=20),
                 ),
                 ft.Row(
                     [
@@ -130,6 +178,11 @@ class TabManager:
             ], spacing=4)
         )
 
+    def _update_state(self, idx, key, value):
+        if idx not in self.tab_state:
+            self.tab_state[idx] = {}
+        self.tab_state[idx][key] = value
+
     def add_tab(self):
         new_idx = max(self.tabs) + 1 if self.tabs else 0
         self.tabs.append(new_idx)
@@ -140,3 +193,5 @@ class TabManager:
         self.tabs.remove(idx)
         if idx in self.tab_fields:
             del self.tab_fields[idx]
+        if idx in self.tab_state:
+            del self.tab_state[idx]

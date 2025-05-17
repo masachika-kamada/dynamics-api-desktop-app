@@ -7,8 +7,8 @@ def main(page: ft.Page):
     page.window_width = 1200
     page.window_height = 800
 
-    login_btn = ft.FilledButton("Login", width=100)
-    logout_btn = ft.OutlinedButton("Logout", width=100)
+    login_btn = ft.FilledButton("Login", width=200)  # expand=Trueで自動調整されるので、実際より幅広で指定
+    logout_btn = ft.OutlinedButton("Logout", width=200)  # expand=Trueで自動調整されるので、実際より幅広で指定
     token_label = ft.Text("Not Authenticated", color=ft.Colors.YELLOW_400)
     token = None
 
@@ -88,6 +88,15 @@ def main(page: ft.Page):
         rebuild_ui()
 
     def on_send(tab_idx, method, url):
+        fields = tab_manager.tab_fields[tab_idx]
+        # クエリパラメータを結合
+        query = fields["query_field"].value.strip()
+        if query:
+            if "?" in url:
+                url = f"{url}&{query}"
+            else:
+                url = f"{url}?{query}"
+
         # 履歴に追加（/apiが含まれていればその後ろ、なければ全体）
         if url:
             api_idx = url.find("/api")
@@ -98,6 +107,48 @@ def main(page: ft.Page):
         else:
             display_url = ""
         history.append((method, display_url))
+
+        # ヘッダーをdictに変換
+        headers_text = fields["headers_field"].value
+        headers = {}
+        for line in headers_text.splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers[k.strip()] = v.strip()
+
+        # アクセストークン追加
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        # APIリクエスト送信
+        from src.api.api_client import APIClient
+        client = APIClient()
+        result = ""
+        try:
+            if method == "GET":
+                resp = client.get(url, token, headers)
+            elif method == "POST":
+                # payload
+                import json as _json
+                payload_text = fields["payload_field"].value
+                try:
+                    payload = _json.loads(payload_text) if payload_text.strip() else {}
+                except Exception as ex:
+                    result = f"Invalid JSON payload: {ex}"
+                    resp = None
+                else:
+                    resp = client.post(url, token, payload, headers)
+            else:
+                resp = None
+                result = f"Unsupported method: {method}"
+            if resp is not None:
+                import json as _json
+                result = _json.dumps(resp, indent=2, ensure_ascii=False)
+        except Exception as ex:
+            result = f"Request failed: {ex}"
+
+        # レスポンスをresult_fieldに表示
+        fields["result_field"].value = result
         rebuild_ui()
 
     tab_manager = TabManager(
@@ -131,7 +182,11 @@ def main(page: ft.Page):
             ft.Row([
                 ft.Container(
                     ft.Column([
-                        ft.Row([login_btn, logout_btn], spacing=8),
+                        ft.Row(
+                            [
+                                ft.Column([login_btn], expand=True),
+                                ft.Column([logout_btn], expand=True),
+                            ], spacing=8),
                         ft.Row([token_label], alignment=ft.MainAxisAlignment.CENTER),
                         ft.Container(
                             ft.Text("History", size=18, weight=ft.FontWeight.BOLD),
