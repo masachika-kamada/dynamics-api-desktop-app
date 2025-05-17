@@ -1,5 +1,6 @@
 import msal
 
+
 class Auth:
     def __init__(self):
         client_id = "51f81489-12ee-4a9e-aaae-a2591f45987d"
@@ -15,7 +16,9 @@ class Auth:
             if "access_token" in result:
                 return result["access_token"]
             else:
-                print("Silent token acquisition failed:", result.get("error_description"))
+                print(
+                    "Silent token acquisition failed:", result.get("error_description")
+                )
                 return None
         else:
             # if no account is found, interactive authentication is required
@@ -23,7 +26,10 @@ class Auth:
             if "access_token" in result:
                 return result["access_token"]
             else:
-                print("Interactive token acquisition failed:", result.get("error_description"))
+                print(
+                    "Interactive token acquisition failed:",
+                    result.get("error_description"),
+                )
                 return None
 
 

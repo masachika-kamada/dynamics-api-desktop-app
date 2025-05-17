@@ -1,14 +1,19 @@
 import flet as ft
 from src.components.tabs import TabManager
 
+
 def main(page: ft.Page):
     page.title = "Postman-like API Client UI Mock (Flet)"
     page.theme_mode = ft.ThemeMode.DARK
     page.window_width = 1200
     page.window_height = 800
 
-    login_btn = ft.FilledButton("Login", width=200)  # expand=Trueで自動調整されるので、実際より幅広で指定
-    logout_btn = ft.OutlinedButton("Logout", width=200)  # expand=Trueで自動調整されるので、実際より幅広で指定
+    login_btn = ft.FilledButton(
+        "Login", width=200
+    )  # expand=Trueで自動調整されるので、実際より幅広で指定
+    logout_btn = ft.OutlinedButton(
+        "Logout", width=200
+    )  # expand=Trueで自動調整されるので、実際より幅広で指定
     token_label = ft.Text("Not Authenticated", color=ft.Colors.YELLOW_400)
     token = None
 
@@ -21,13 +26,21 @@ def main(page: ft.Page):
         expand=True,
         spacing=0,
     )
-    add_group_btn = ft.FloatingActionButton(icon=ft.Icons.ADD, tooltip="Add Group", mini=True)
-    del_group_btn = ft.FloatingActionButton(icon=ft.Icons.DELETE, tooltip="Delete Group", bgcolor=ft.Colors.RED_400, mini=True)
+    add_group_btn = ft.FloatingActionButton(
+        icon=ft.Icons.ADD, tooltip="Add Group", mini=True
+    )
+    del_group_btn = ft.FloatingActionButton(
+        icon=ft.Icons.DELETE,
+        tooltip="Delete Group",
+        bgcolor=ft.Colors.RED_400,
+        mini=True,
+    )
 
     # --- ログイン処理 ---
     def on_login(e):
         nonlocal token
         from src.api.auth_client import Auth
+
         auth = Auth()
         scopes = ["https://api.bap.microsoft.com/.default"]
         token_label.value = "Authenticating..."
@@ -122,14 +135,20 @@ def main(page: ft.Page):
 
         # APIリクエスト送信
         from src.api.api_client import APIClient
+        import time
+
         client = APIClient()
         result = ""
+        status_code = ""
+        elapsed_ms = ""
         try:
+            start_time = time.time()
             if method == "GET":
                 resp = client.get(url, token, headers)
             elif method == "POST":
                 # payload
                 import json as _json
+
                 payload_text = fields["payload_field"].value
                 try:
                     payload = _json.loads(payload_text) if payload_text.strip() else {}
@@ -141,21 +160,34 @@ def main(page: ft.Page):
             else:
                 resp = None
                 result = f"Unsupported method: {method}"
+            elapsed_ms = int((time.time() - start_time) * 1000)
             if resp is not None:
-                import json as _json
-                result = _json.dumps(resp, indent=2, ensure_ascii=False)
+                # ステータスコード取得
+                status_code = resp.status_code
+                # 本文取得
+                result = resp.text
         except Exception as ex:
             result = f"Request failed: {ex}"
+            status_code = ""
+            elapsed_ms = ""
 
         # レスポンスをresult_fieldに表示
+        print(str(status_code))  # for debug: print status code to command line
+        tab_manager.tab_state[tab_idx]["result"] = result
+        tab_manager.tab_state[tab_idx]["status_code"] = (
+            str(status_code) if status_code is not None else ""
+        )
+        tab_manager.tab_state[tab_idx]["elapsed_ms"] = elapsed_ms
         fields["result_field"].value = result
+        if hasattr(fields["result_field"], "update"):
+            fields["result_field"].update()
         rebuild_ui()
 
     tab_manager = TabManager(
         on_tab_change=handle_tab_change,
         on_add_tab=handle_add_tab,
         on_close_tab=handle_close_tab,
-        on_send=on_send
+        on_send=on_send,
     )
 
     def rebuild_ui():
@@ -168,7 +200,7 @@ def main(page: ft.Page):
                     title=ft.Text(f"{method} {url}", size=16),
                     dense=True,
                     min_vertical_padding=0,
-                    content_padding=0
+                    content_padding=0,
                 )
             )
         tab_bar = ft.Tabs(
@@ -179,39 +211,52 @@ def main(page: ft.Page):
             on_change=handle_tab_change,
         )
         page.add(
-            ft.Row([
-                ft.Container(
-                    ft.Column([
-                        ft.Row(
+            ft.Row(
+                [
+                    ft.Container(
+                        ft.Column(
                             [
-                                ft.Column([login_btn], expand=True),
-                                ft.Column([logout_btn], expand=True),
-                            ], spacing=8),
-                        ft.Row([token_label], alignment=ft.MainAxisAlignment.CENTER),
-                        ft.Container(
-                            ft.Text("History", size=18, weight=ft.FontWeight.BOLD),
-                            margin=ft.margin.only(top=20, bottom=0),
+                                ft.Row(
+                                    [
+                                        ft.Column([login_btn], expand=True),
+                                        ft.Column([logout_btn], expand=True),
+                                    ],
+                                    spacing=8,
+                                ),
+                                ft.Row(
+                                    [token_label], alignment=ft.MainAxisAlignment.CENTER
+                                ),
+                                ft.Container(
+                                    ft.Text(
+                                        "History", size=18, weight=ft.FontWeight.BOLD
+                                    ),
+                                    margin=ft.margin.only(top=20, bottom=0),
+                                ),
+                                group_list,
+                                ft.Row([add_group_btn, del_group_btn], spacing=8),
+                            ],
+                            width=210,
+                            expand=False,
                         ),
-                        group_list,
-                        ft.Row([add_group_btn, del_group_btn], spacing=8),
-                    ], width=210, expand=False),
-                    padding=18,
-                ),
-                ft.VerticalDivider(width=1),
-                ft.Container(
-                    ft.Column([
-                        tab_bar
-                    ], expand=True),
-                    padding=18,
-                    expand=True,
-                ),
-            ], expand=True)
+                        padding=18,
+                    ),
+                    ft.VerticalDivider(width=1),
+                    ft.Container(
+                        ft.Column([tab_bar], expand=True),
+                        padding=18,
+                        expand=True,
+                    ),
+                ],
+                expand=True,
+            )
         )
         page.update()
 
     # 初期UI構築
     rebuild_ui()
 
+
 if __name__ == "__main__":
     import flet as ft
+
     ft.app(target=main)
