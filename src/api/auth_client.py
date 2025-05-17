@@ -7,13 +7,18 @@ class Auth:
         authority = "https://login.microsoftonline.com/organizations"
         self.app = msal.PublicClientApplication(client_id, authority=authority)
         self.token = None
+        self.tokens = {}  # スコープごとのトークンキャッシュ
 
     def acquire_token(self, scopes):
+        # 既存の後方互換メソッド（最初のスコープのみでキャッシュ）
+        scope_str = " ".join(scopes)
+        if scope_str in self.tokens:
+            return self.tokens[scope_str]
         accounts = self.app.get_accounts()
         if accounts:
-            # if an account is found, token can be acquired silently
             result = self.app.acquire_token_silent(scopes, account=accounts[0])
             if "access_token" in result:
+                self.tokens[scope_str] = result["access_token"]
                 return result["access_token"]
             else:
                 print(
@@ -21,15 +26,63 @@ class Auth:
                 )
                 return None
         else:
-            # if no account is found, interactive authentication is required
             result = self.app.acquire_token_interactive(scopes=scopes)
             if "access_token" in result:
+                self.tokens[scope_str] = result["access_token"]
                 return result["access_token"]
             else:
                 print(
                     "Interactive token acquisition failed:",
                     result.get("error_description"),
                 )
+                return None
+
+    def acquire_token_for_scope(self, scopes, force_interactive=False):
+        """
+        指定スコープでトークンを取得（キャッシュ優先、silent→interactive）
+        scopes: list[str]
+        force_interactive: Trueならsilent失敗時にinteractiveも試す
+        """
+        scope_str = " ".join(scopes)
+        if scope_str in self.tokens:
+            return self.tokens[scope_str]
+        accounts = self.app.get_accounts()
+        if accounts:
+            result = self.app.acquire_token_silent(scopes, account=accounts[0])
+            if "access_token" in result:
+                self.tokens[scope_str] = result["access_token"]
+                return result["access_token"]
+            elif force_interactive:
+                result = self.app.acquire_token_interactive(scopes=scopes)
+                if "access_token" in result:
+                    self.tokens[scope_str] = result["access_token"]
+                    return result["access_token"]
+                else:
+                    print(
+                        "Interactive token acquisition failed:",
+                        result.get("error_description"),
+                    )
+                    return None
+            else:
+                print(
+                    "Silent token acquisition failed:", result.get("error_description")
+                )
+                return None
+        else:
+            # アカウントがなければinteractiveのみ
+            if force_interactive:
+                result = self.app.acquire_token_interactive(scopes=scopes)
+                if "access_token" in result:
+                    self.tokens[scope_str] = result["access_token"]
+                    return result["access_token"]
+                else:
+                    print(
+                        "Interactive token acquisition failed:",
+                        result.get("error_description"),
+                    )
+                    return None
+            else:
+                print("No account found and force_interactive=False")
                 return None
 
 

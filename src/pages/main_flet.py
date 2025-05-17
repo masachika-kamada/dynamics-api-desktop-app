@@ -36,12 +36,13 @@ def main(page: ft.Page):
         mini=True,
     )
 
+    # --- Authインスタンスを共通化 ---
+    from src.api.auth_client import Auth
+    auth = Auth()
+
     # --- ログイン処理 ---
     def on_login(e):
-        nonlocal token
-        from src.api.auth_client import Auth
-
-        auth = Auth()
+        nonlocal token, auth
         scopes = ["https://api.bap.microsoft.com/.default"]
         token_label.value = "Authenticating..."
         token_label.color = ft.Colors.YELLOW_400
@@ -101,7 +102,52 @@ def main(page: ft.Page):
         rebuild_ui()
 
     def on_send(tab_idx, method, url):
+        nonlocal token, auth
         fields = tab_manager.tab_fields[tab_idx]
+
+        # --- 認証チェック（スコープ動的対応） ---
+        import re
+
+        # URLからスコープを決定
+        match = re.match(r"https?://[^/]+", url)
+        if match:
+            domain = match.group(0)
+            scopes = [f"{domain}/.default"]
+        else:
+            # URLが不正な場合は従来のスコープ
+            scopes = ["https://api.bap.microsoft.com/.default"]
+
+        # 認証状態表示をloginボタン時と同じように更新
+        token_label.value = "Authenticating..."
+        token_label.color = ft.Colors.YELLOW_400
+        page.update()
+        try:
+            # サイレント認証のみ（失敗時はインタラクティブ認証しない）
+            t = auth.acquire_token_for_scope(scopes, force_interactive=False)
+            if t:
+                token = t
+                token_label.value = "Authenticated"
+                token_label.color = ft.Colors.GREEN_400
+                page.update()
+            else:
+                token = None
+                token_label.value = "Auth Failed"
+                token_label.color = ft.Colors.RED_400
+                page.update()
+                fields["result_field"].value = "認証が必要です。ログインしてください（Loginボタンを押してください）。"
+                if hasattr(fields["result_field"], "update"):
+                    fields["result_field"].update()
+                return
+        except Exception as ex:
+            token = None
+            token_label.value = f"Auth Error: {ex}"
+            token_label.color = ft.Colors.RED_400
+            page.update()
+            fields["result_field"].value = f"認証エラー: {ex}"
+            if hasattr(fields["result_field"], "update"):
+                fields["result_field"].update()
+            return
+
         # クエリパラメータを結合
         query = fields["query_field"].value.strip()
         if query:
@@ -110,7 +156,7 @@ def main(page: ft.Page):
             else:
                 url = f"{url}?{query}"
 
-        # 履歴に追加（/apiが含まれていればその後ろ、なければ全体）
+        # 履歴に追加（/apiが含まれていればその後ろ、なければ全体）        
         if url:
             api_idx = url.find("/api")
             if api_idx != -1:
