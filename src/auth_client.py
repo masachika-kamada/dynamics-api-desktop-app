@@ -25,3 +25,13 @@ class Auth:
             else:
                 print("Interactive token acquisition failed:", result.get("error_description"))
                 return None
+
+
+if __name__ == "__main__":
+    auth = Auth()
+    scopes = ["https://api.bap.microsoft.com/.default"]
+    token = auth.acquire_token(scopes)
+    if token:
+        print("Access token acquired:", token)
+    else:
+        print("Failed to acquire access token.")

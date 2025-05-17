@@ -5,8 +5,8 @@ description = "Microsoft Dynamics APIと連携するPython製デスクトップ�
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "flet[all]>=0.28.2",
     "msal>=1.32.3",
-    "ttkbootstrap>=1.13.2",
 ]
 
 [project.scripts]
