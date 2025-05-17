@@ -46,7 +46,7 @@ class MainWindow(tk.Tk):
         self.req_listbox.bind("<<ListboxSelect>>", self.on_req_selected)
         ttk.Button(left_frame, text="Delete", command=self.delete_request, bootstyle=DANGER).pack(fill=X, pady=5)
 
-        # Right: Auth section
+        # Right: Auth sectioe
         auth_frame = ttk.Frame(right_frame)
         auth_frame.pack(fill=X, pady=(0, 10))
         ttk.Label(auth_frame, text="Scopes:").pack(side=LEFT)

@@ -1,8 +1,5 @@
-from src.main_window import MainWindow
-
-def main():
-    app = MainWindow()
-    app.mainloop()
+from src.main_flet import main
+import flet as ft
 
 if __name__ == "__main__":
-    main()
+    ft.app(target=main)
